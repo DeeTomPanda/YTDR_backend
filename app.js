@@ -20,7 +20,7 @@ const io=new Server(server,{
 	cors:{origin:"*"}
 })
 
-server.setTimeout(180000,()=>console.log("Time's up!"))
+server.setTimeout(1800000,()=>console.log("Time's up!"))
 
 //Middlewares
 
@@ -149,11 +149,12 @@ app.post('/download',(req,res)=>{
 	res.setHeader("Content-Type","video/mp4")
 	stream.pipe(res)
 	.on('finish',()=>{
+		io.disconnect(true)
 		fs.unlink(__dirname+`/${id}`,()=>console.log(`Removed ${id}`))
 		res.status(201).end()}
 	)
 })
 
-app.get('*',(req,res)=>{
+app.get('/',(req,res)=>{
 	res.status(201).end("There exists no such place!")}
 )
