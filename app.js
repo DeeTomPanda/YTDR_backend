@@ -102,13 +102,13 @@ app.post('/getA&V',async (req,res)=>{
 
 		audio.on('data',(chunk)=>{
 			videoChunk=videoChunk+chunk.length
-			//setInterval(()=>io.emit('video',Number(videoChunk)),2500)
+			io.emit('video',Number(videoChunk))
 			console.log("Audio downloading",videoChunk)
 		})
 		.on('finish',()=>console.log("Downloaded Audio"))
 		video.on('data',(chunk)=>{
 			audioChunk=audioChunk+chunk.length
-			//setInterval(()=>io.emit('audio',Number(audioChunk)),2500)
+			io.emit('audio',Number(audioChunk))
 			console.log("Video downloading",audioChunk)
 		})
 		audio.pipe(ffmpegProcess.stdio[4])
@@ -129,13 +129,13 @@ app.post('/getA&V',async (req,res)=>{
     				args[key.trim()] = value.trim();
 				let size=(args.total_size? (Number(args.total_size)/1000000).toFixed(2) : "---")
 				console.log("encoding",String(size)+"mb encoded")
-				//io.emit("encoding",String(size))
+				io.emit("encoding",String(size))
 			}		//
 		})
 		ffmpegProcess.on('exit',()=>{			//fired when cp is completed
 			console.log("Downloaded & encoded")
 			ffmpegProcess.kill()			//solves ffmpeg hang issues after encode
-			//io.emit("EOD","Downloaded Successfully")	//
+			io.emit("EOD","Downloaded Successfully")	//
 			res.status(201).end("Success")}
 		)
 		 ffmpegProcess.stdio[3].on('error',(err)=>{
