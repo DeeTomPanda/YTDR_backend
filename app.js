@@ -132,7 +132,7 @@ app.post('/getA&V',async (req,res)=>{
 				//io.emit("encoding",String(size))
 			}		//
 		})
-		ffmpegProcess.on('exit',()=>{			//fired when cp is completed
+		ffmpegProcess.on('close',()=>{			//fired when cp is completed
 			console.log("Downloaded & encoded")
 			ffmpegProcess.kill()			//solves ffmpeg hang issues after encode
 			io.emit("EOD","Downloaded Successfully")	//
