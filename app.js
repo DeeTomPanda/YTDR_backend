@@ -129,10 +129,10 @@ app.post('/getA&V',async (req,res)=>{
     				args[key.trim()] = value.trim();
 				let size=(args.total_size? (Number(args.total_size)/1000000).toFixed(2) : "---")
 				console.log("encoding",String(size)+"mb encoded")
-				//io.emit("encoding",String(size))
+				io.emit("encoding",String(size))
 			}		//
 		})
-		ffmpegProcess.on('close',()=>{			//fired when cp is completed
+		ffmpegProcess.on('exit',()=>{			//fired when cp is completed
 			console.log("Downloaded & encoded")
 			ffmpegProcess.kill()			//solves ffmpeg hang issues after encode
 			io.emit("EOD","Downloaded Successfully")	//
