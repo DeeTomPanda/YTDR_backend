@@ -10,6 +10,8 @@ import Cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 
+//vars and funcs
+
 const PORT=8080
 const app=express()
 const __dirname=path.resolve()
@@ -20,8 +22,6 @@ const io=new Server(server,{
 	cors:{origin:"*"}
 })
 
-server.setTimeout(1800000,()=>console.log("Time's up!"))
-
 //Middlewares
 
 app.use(Cors())
@@ -30,7 +30,10 @@ app.use(express.json())
 
 //routes
 
-io.on("connection",(socket)=>console.log("User connected"))
+io.on("connection",(socket)=>{
+	console.log("User connected")
+	io.on("disconnect",(socket)=>console.log("User disconnected"))
+})
 
 app.post('/getinfo',async(req,res)=>{
 	console.log(req.body)
@@ -41,21 +44,16 @@ app.post('/getinfo',async(req,res)=>{
 		res.status(401).end("Invalid url")
 	else{
 		const info=await ytdl.getInfo(yturl)
+		const AV=await ytdl.chooseFormat(info.formats,{filter:'audioandvideo'})
+		console.log(AV)
 		let list=[]
 		let title=info.videoDetails.title
 		list=info.formats.map((v,i)=>{
-			if(v.qualityLabel)
 		   	   return {
 			      title,
-			      quality:v.qualityLabel,
+			      quality:v.qualityLabel?v.qualityLabel:v.audioQuality,
 			      itag:v.itag,
 			      mime:v.mimeType.substring(0,v.mimeType.indexOf(';'))}
-			else
-		  	   return {
-			     title,
-			     quality:v.audioQuality,
-			     itag:v.itag,
-			     mime:v.mimeType.substring(0,v.mimeType.indexOf(';'))}
 		})
 		res.status(201).send(list)
 	}
@@ -70,8 +68,11 @@ app.post('/getA&V',async (req,res)=>{
 
 	if(type.includes("video"))
 	{
-		const video=await ytdl(ref,{ quality:itag })			
-		const audio =await ytdl(ref, { quality: 'highestaudio' })
+		let audioChunk,videoChunk
+		audioChunk=videoChunk=0
+
+		const video = await ytdl(ref,{ quality:itag })			
+		const audio = await ytdl(ref, { quality: 'highestaudio' })
 	
 		//Encoding of video and audio
 		const ffmpegProcess = cp.spawn(ffmpeG, [
@@ -99,8 +100,24 @@ app.post('/getA&V',async (req,res)=>{
   		],
 		})
 
-		audio.pipe(ffmpegProcess.stdio[4]);
-		video.pipe(ffmpegProcess.stdio[5]);
+		audio.on('data',(chunk)=>{
+			videoChunk=videoChunk+chunk.length
+			//setInterval(()=>io.emit('video',Number(videoChunk)),2500)
+			console.log("Audio downloading",videoChunk)
+		})
+		.on('finish',()=>console.log("Downloaded Audio"))
+		video.on('data',(chunk)=>{
+			audioChunk=audioChunk+chunk.length
+			//setInterval(()=>io.emit('audio',Number(audioChunk)),2500)
+			console.log("Video downloading",audioChunk)
+		})
+		audio.pipe(ffmpegProcess.stdio[4])
+		ffmpegProcess.stdio[4].on('drain',()=>{
+			console.log(" Audio encoding")
+		})
+		.on('finish',()=>console.log("Downloaded video"))
+		video.pipe(ffmpegProcess.stdio[5])
+		ffmpegProcess.stdio[5].on('drain',()=>console.log("Video encoding"))
 
 		res.setHeader("Content-Type","application/json")
 
@@ -111,31 +128,44 @@ app.post('/getA&V',async (req,res)=>{
     				const [key, value] = l.split('=');
     				args[key.trim()] = value.trim();
 				let size=(args.total_size? (Number(args.total_size)/1000000).toFixed(2) : "---")
-				io.emit("data",String(size))}
+				console.log("encoding",String(size)+"mb encoded")
+				//io.emit("encoding",String(size))
+			}		//
 		})
-		.on('end',()=>{
+		ffmpegProcess.on('exit',()=>{			//fired when cp is completed
 			console.log("Downloaded & encoded")
+			ffmpegProcess.kill()			//solves ffmpeg hang issues after encode
+			//io.emit("EOD","Downloaded Successfully")	//
 			res.status(201).end("Success")}
 		)
-		.on('error',(err)=>{
+		 ffmpegProcess.stdio[3].on('error',(err)=>{
 			console.log(err)
+			io.emit("err",err)			//
 			res.status(404).end("Server crashed! Please try again after some time")}
 		)
 	}
 	else if(type.includes('audio'))
 	{
+		var audioChunk=0
 		const audio =await ytdl(ref, { quality: itag })
-		const mediaFile=fs.createWriteStream(id)
+		const mediaFile=fs.createWriteStream(id,{ highWaterMark:32000 })
 		audio.pipe(mediaFile)
-		.on('readable',(data)=>console.log("Piping"))
 		.on('finish',()=>{
 			console.log("Downloaded Audio")
-			res.status(201).end("Success")}
+			res.status(201).send("Audio in server")}
 		)
 		.on('error',(err)=>{
 			console.log(err)
+			io.emit("audio","---")
+			io.disconnect()
 			res.status(404).end(err)}
 		)
+		audio.on('data',(chunk)=>{
+			audioChunk=audioChunk+Number(chunk.length/1000000).toFixed(3)
+			console.log("Reading")
+		})
+
+		//setInterval(()=>io.emit("audio",Number(audioChunk)),1500)
 	}
 	else
 		res.end("Invalid format")
@@ -144,12 +174,13 @@ app.post('/getA&V',async (req,res)=>{
 })
 
 app.post('/download',(req,res)=>{
+	console.log("Reached download")
 	const { id }=req.body
 	const stream=fs.createReadStream(__dirname+`/${id}`)
 	res.setHeader("Content-Type","video/mp4")
+	res.on('drain',(src)=>console.log("Draining data"))
 	stream.pipe(res)
 	.on('finish',()=>{
-		io.disconnect(true)
 		fs.unlink(__dirname+`/${id}`,()=>console.log(`Removed ${id}`))
 		res.status(201).end()}
 	)
