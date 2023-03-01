@@ -12,7 +12,7 @@ import WebSocket,{ WebSocketServer } from 'ws';
 
 //vars and funcs
 
-const PORT=8080
+const PORT=3001
 const app=express()
 const __dirname=path.resolve()
 
